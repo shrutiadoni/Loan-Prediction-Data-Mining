@@ -1,0 +1,325 @@
+---
+title: "Assignment 1"
+author: "Babandeep Singh, Janhavi Powale, Shruti Adoni"
+date: "2/3/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r Loading in the necessary libraries}
+library(tidyverse)
+library(lubridate)
+library(DataExplorer)
+library(ggplot2)
+library(dplyr)
+library(readr)
+```
+
+
+```{r Loading Data set}
+lcdf <- read_csv("C:/Users/shrut/OneDrive/Desktop/Shruti/UIC/IDS 572/Assignment1/lcData4m.csv")
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r Changing data types}
+lcdf$int_rate<- as.numeric(sub("%","",lcdf$int_rate)) #into decimals. 
+lcdf$revol_util <- as.numeric(sub("%","",lcdf$revol_util))  # into decimals 
+lcdf$loan_status <- as.factor(lcdf$loan_status)  # converting as factor
+lcdf$hardship_flag <- as.factor(lcdf$hardship_flag)
+lcdf$grade <- as.factor(lcdf$grade)
+lcdf$sub_grade <- as.factor(lcdf$sub_grade)
+lcdf$addr_state <- as.factor(lcdf$addr_state)
+lcdf$home_ownership <- as.factor(lcdf$home_ownership)
+lcdf$debt_settlement_flag <- as.factor(lcdf$debt_settlement_flag)
+lcdf$purpose <- as.factor(lcdf$purpose)
+lcdf$issue_d<- as.Date(paste("01-", lcdf$issue_d, sep = ""), format = "%d-%b-%y")
+lcdf$earliest_cr_line <- as.Date(paste("01-", lcdf$earliest_cr_line, sep = ""), format = "%d-%b-%y")
+```
+
+
+```{r Question 2 - a - 1}
+ls <- lcdf %>% group_by(loan_status) %>% tally()
+ggplot(data=ls)+ geom_col(aes(x=loan_status, y =n)) 
+
+# Default rate variation with grade 
+ls <- lcdf %>% group_by(loan_status, grade) %>% tally()
+ggplot(ls, aes( x = grade,y=n)) + geom_col() + facet_wrap(~loan_status)
+
+
+# Variation with Subgrade 
+ls <- lcdf %>% group_by(loan_status,grade,sub_grade)%>% tally()
+ggplot(ls, aes( x =sub_grade, y=n)) + geom_col(aes(fill=loan_status))
+
+```
+
+
+```{r Question 2-a-2 }
+ls <- lcdf %>% group_by(grade) %>% tally()
+ggplot(data=ls)+geom_col(aes(x=grade,y=n))
+
+# loan amount variation with grade 
+ls <- lcdf %>% group_by(grade) %>% summarize(n = mean(loan_amnt))
+ggplot(ls) + geom_col(aes(x=grade, y = n))
+
+# variation with grade and sub_grade 
+# ls <- lcdf %>% group_by(grade, sub_grade) %>% summarize(n = mean(loan_amnt))
+# ggplot(ls, aes( x = sub_grade,y=n)) + geom_col(aes(fill=grade))
+
+
+# variation with int_rate and grades 
+ls <- lcdf %>% group_by(sub_grade, int_rate) %>% tally() %>% collect()
+ggplot(ls, aes( x =sub_grade, y=int_rate)) + geom_col(aes(fill=n))
+
+```
+
+
+```{r Question 2-a-3}
+ls <- lcdf %>% group_by(purpose) %>% tally()
+ggplot(ls) + geom_col(aes(x=purpose,y=n)) +  theme(axis.text.x = element_text(angle = 90))
+
+ls <-lcdf %>% group_by(purpose,grade) %>% summarise(nLoans=n(), defaults=sum(loan_status=="Charged Off"), avgInterest= mean(int_rate), avgLoanAMt=mean(loan_amnt), avgPmnt=mean(total_pymnt))
+ls
+
+# defaults vary by purpose
+ggplot(ls) + geom_col(aes(x=purpose, y = defaults)) + theme(axis.text.x = element_text(angle = 90))
+
+```
+
+
+```{r Question 2-a-4}
+
+# annual retrun in percentage
+lcdf$annRet <- ((lcdf$total_pymnt -lcdf$funded_amnt)/lcdf$funded_amnt)*(12/36)*100
+
+# Annual return in amount 
+lcdf$actRet<- (lcdf$total_pymnt-lcdf$funded_amnt)/3
+
+ls <- lcdf %>% group_by(purpose) %>% summarise(n=mean(annRet))
+ggplot(ls)+ geom_col(aes(x=purpose, y =n)) + theme(axis.text.x = element_text(angle = 90))
+
+ls <- lcdf %>% group_by(grade) %>% summarise(na=mean(annRet),ni=mean(int_rate))
+ggplot(ls)+ geom_col(aes(x=grade, y =na,fill = ni)) 
+# maximum return is in A grade  but thee are no returns in F and G grade. yes, It is possible that ... there is fewer people in grade f n g and with higher int reates, making them the highest defaulters. 
+
+# variation based on grade n subgrade
+ls <- lcdf %>% group_by(grade, sub_grade) %>% summarize(n = mean(annRet))
+ggplot(ls, aes( x = sub_grade,y=n)) + geom_col(aes(fill=grade))
+```
+
+
+```{r Q2-a-4}
+#Derived attribute: proportion of satisfactory bankcard accounts 
+lcdf$propSatisBankcardAccts <- ifelse(lcdf$num_bc_tl>0, lcdf$num_bc_sats/lcdf$num_bc_tl, 0)
+
+
+lcdf$borrHistory <- as.numeric(lcdf$issue_d-lcdf$earliest_cr_line)/365
+#or we can use the lubridate functions to precidely handle date-times durations
+# lcdf$borrHistory <- as.duration(lcdf$earliest_cr_line %--% lcdf$issue_d  ) / dyears(1)
+
+# proportion of active accounts
+lcdf$PropActAcc <- (lcdf$open_acc/lcdf$total_acc)
+
+# proportion of revolving accounts 
+lcdf$PropRevAcc <- (lcdf$num_op_rev_tl/lcdf$num_rev_accts)
+
+# Average Monthly usage per account 
+lcdf$AvgMonUse <- (lcdf$tot_cur_bal/lcdf$total_acc)
+
+# Credit usage 
+lcdf$CredUsa <- (lcdf$tot_cur_bal/lcdf$total_bc_limit)
+
+
+# we can use Avg Fico scoe
+lcdf$avgFiico <- (lcdf$fico_range_low+lcdf$fico_range_high)/2
+```
+
+
+```{r Q2-b}
+
+# getting the missing values
+# plot_missing(lcdf)
+
+#Drop vars with all empty values
+lcdf <- lcdf %>% select_if(function(x){!all(is.na(x))})
+
+
+#missing value proportions in each column
+# colMeans(is.na(lcdf))
+# or, get only those columns where there are missing values
+# colMeans(is.na(lcdf))[colMeans(is.na(lcdf))>0]
+
+#remove variables which have more than, for example, 60% missing values
+nm<-names(lcdf)[colMeans(is.na(lcdf))>0.6]
+lcdf <- lcdf %>% select(-nm)
+
+
+#Impute missing values - first get the columns with missing values
+# colMeans(is.na(lcdf))[colMeans(is.na(lcdf))>0]
+#summary of data in these columns
+ nm<- names(lcdf)[colSums(is.na(lcdf))>0]
+# summary(lcdf[, nm])
+
+#mths_since_last_delinq: has 48% missings, these pertain to no delinquincy, so replace by max value (176) or a value higher than the max (500) -- we will try this out on a temporary dataset lcx with the attributes that have misisng values
+# lcx<-lcdf[, c(nm)]
+# colMeans(is.na(lcx))[colMeans(is.na(lcx))>0]
+lcdf<- lcdf %>% replace_na(list(mths_since_last_delinq = 500))
+
+#For revol_util, suppose we want to replace the misisng values by the median
+# lcx<- lcx %>% replace_na(list(revol_util=median(lcx$revol_util, na.rm=TRUE)))
+
+# removing values which can further cause leakage or have majority of values as zero or just one value. it can further bias our Decision tree so, they are removed. 
+lcdf <- lcdf %>% select (-c(installment,funded_amnt_inv,funded_amnt,
+                            last_fico_range_low,earliest_cr_line,fico_range_low, fico_range_high,revol_util,
+                            inq_last_6mths,total_pymnt_inv,total_rec_prncp,total_rec_int,total_rec_late_fee,
+                            recoveries,collection_recovery_fee,last_pymnt_d,last_pymnt_amnt,
+                            last_credit_pull_d, out_prncp, out_prncp_inv,
+                            last_fico_range_high,tot_coll_amt,
+                            mo_sin_old_il_acct, mo_sin_old_rev_tl_op,mo_sin_rcnt_rev_tl_op,
+                            mo_sin_rcnt_tl,mort_acc,mths_since_recent_bc,mths_since_recent_inq,
+                             total_bal_ex_mort,total_bc_limit,hardship_flag))
+
+
+#some additional vars to drop
+lcdf <- lcdf %>% select(-c(emp_title,title,emp_length, zip_code,policy_code, application_type, verification_status, initial_list_status, collections_12_mths_ex_med, chargeoff_within_12_mths, debt_settlement_flag,annRet,term, pymnt_plan,actRet,open_acc,total_acc,propSatisBankcardAccts,PropActAcc,PropRevAcc,CredUsa))
+
+# some additional variable those are highly correlated 
+lcdf <- lcdf %>% select (-c(tot_cur_bal,percent_bc_gt_75,num_tl_op_past_12m,num_tl_30dpd,num_rev_tl_bal_gt_0, num_bc_tl,num_op_rev_tl,num_rev_accts,
+                            num_op_rev_tl,tot_cur_bal,total_rev_hi_lim,total_il_high_credit_limit,tot_hi_cred_lim,num_sats, total_pymnt))
+
+lcdf[is.na(lcdf)]<-0
+
+#removing with same values column
+lcdf<- lcdf %>% select_if(~ length(unique(.)) > 1)
+
+# removing with more than 10 levels 
+lcdf <- lcdf %>% select(-c(addr_state,sub_grade))
+
+# all set to process the decision tree -------------------------------------------------------------------------------------------------------------------------------
+
+```
+
+
+```{r Q4 Decision Tree }
+# ----------------------------------- with Rpart ----------------------------------------
+
+library(rpart)
+
+lcdf$loan_status <- factor(lcdf$loan_status, levels=c("Fully Paid", "Charged Off"))
+
+#split the data into trn, tst subsets
+nr<-nrow(lcdf)
+trnIndex<- sample(1:nr, size = round(0.6*nr), replace=FALSE)
+lcdfTrn <- lcdf[trnIndex, ]
+lcdfTst <- lcdf[-trnIndex, ]
+
+lcDT1 <- rpart(loan_status ~., data=lcdfTrn, method="class", parms = list(split = "information"), control = rpart.control(cp=0.0001, minsplit = 30))
+
+#Do we want to prune the tree -- check for performance with dfferent cp levels
+printcp(lcDT1)
+lcDT1p<- prune.rpart(lcDT1, cp=0.0003)
+
+#Evaluate performance
+predTrn=predict(lcDT1,lcdfTrn, type='class')
+table(pred = predTrn, true=lcdfTrn$loan_status)
+
+mean(predTrn == lcdfTrn$loan_status)
+table(pred = predict(lcDT1,lcdfTst, type='class'), true=lcdfTst$loan_status)
+mean(predict(lcDT1,lcdfTst, type='class') ==lcdfTst$loan_status)
+
+#With a different classsification threshold
+CTHRESH=0.3
+predProbTrn=predict(lcDT1,lcdfTrn, type='prob')
+predTrnCT = ifelse(predProbTrn[, 'Charged Off'] > CTHRESH, 'Charged Off', 'Fully Paid')
+table(predTrnCT , true=lcdfTrn$loan_status)
+
+# Or, to set the predTrnCT values as factors, and then get the confusion matrix
+# table(predictions=factor(predTrnCT, levels=c("Fully Paid", "Charged Off")), actuals=lcdfTrn$loan_status)
+
+
+library(ROCR)
+
+score=predict(lcDT1,lcdfTst, type="prob")[,"Charged Off"]
+pred=prediction(score, lcdfTst$loan_status, label.ordering = c("Fully Paid", "Charged Off"))
+#label.ordering here specifies the 'negative', 'positive' class labels   
+
+#ROC curve
+aucPerf <-performance(pred, "tpr", "fpr")
+plot(aucPerf)
+abline(a=0, b= 1)
+
+#AUC value
+aucPerf=performance(pred, "auc")
+aucPerf@y.values
+
+
+#Lift curve
+liftPerf <-performance(pred, "lift", "rpp")
+plot(liftPerf)
+
+
+# variable importance
+lcDT1p$variable.importance
+
+```
+
+
+```{r pressure, echo=FALSE}
+# ------------------------------------------   Decision Tree with C50   ---------------------------------------------------------
+library(C50)
+tree_mod = C5.0(loan_status ~.,data=lcdfTrn)
+
+summary(tree_mod)
+# with Training Data 
+predTrn=predict(tree_mod,lcdfTrn, type='class')
+table(pred = predTrn, true=lcdfTrn$loan_status)
+mean(predTrn == lcdfTrn$loan_status)
+
+# with test data
+table(pred = predict(tree_mod,lcdfTst, type='class'), true=lcdfTst$loan_status)
+mean(predict(tree_mod,lcdfTst, type='class') ==lcdfTst$loan_status)
+
+#With a different classsification threshold
+CTHRESH=0.2
+predProbTrn=predict(tree_mod,lcdfTrn, type='prob')
+predTrnCT = ifelse(predProbTrn[, 'Charged Off'] > CTHRESH, 'Charged Off', 'Fully Paid')
+table(predTrnCT , true=lcdfTrn$loan_status)
+
+
+
+# ROCR plots 
+
+library(ROCR)
+
+score=predict(tree_mod,lcdfTst, type="prob")[,"Charged Off"]
+pred=prediction(score, lcdfTst$loan_status, label.ordering = c("Fully Paid", "Charged Off"))
+#label.ordering here specifies the 'negative', 'positive' class labels   
+
+#ROC curve
+aucPerf <-performance(pred, "tpr", "fpr")
+plot(aucPerf)
+abline(a=0, b= 1)
+
+#AUC value
+aucPerf=performance(pred, "auc")
+aucPerf@y.values
+
+
+#Lift curve
+liftPerf <-performance(pred, "lift", "rpp")
+plot(liftPerf)
+
+```
